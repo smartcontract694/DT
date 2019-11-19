@@ -1,1 +1,190 @@
 
+pragma solidity >=0.4.22 <0.6.0;
+
+contract Digital_Twin{
+
+bytes32 public agreementFormIPFS;//it holds the details of the agreement between the different managers/editors during the creation process
+DigitalTwin public DT;
+address public ProcessManager;
+address public DesignManager;
+address public QualityManager;
+address public TestingManager;
+address public DeliveryManager;
+
+enum DT_State {NotCreated, OrderedToBeCreated, InDesignPhase,DoneWithDesignPhase, InBuildingPhase, DoneWithBuildingPhase,
+                InTestingPhase, DoneWithTestingPhase, AvailableForRelease, ReservedForNewOwner, ReleasedToNewOwner }//states of the DT during the creation process
+
+struct DigitalTwin {
+  address  creator; //address of the first owner/creator
+  address  CurrentOwner;//address of the current owner
+  string description;//informtation about the digital twin
+  bytes32 IPFS_Hash;//IPFS hash of the digital twin on the IPFS server
+  uint256 timestamp;
+  bool warranty;
+  DT_State state;
+}
+
+
+//constructor
+constructor() public{
+    DesignManager = 0x14723A09ACff6D2A60DcdF7aA4AFf308FDDC160C;
+    QualityManager = 0x4B0897b0513fdC7C541B6d9D7E929C4e5364D2dB;
+    TestingManager = 0x583031D1113aD414F02576BD6afaBfb302140225;
+    DeliveryManager = 0xdD870fA1b7C4700F2BD7f44238821C26f7392148;
+    ProcessManager = msg.sender;
+    DT.creator = msg.sender;
+    DT.CurrentOwner = msg.sender;
+    DT.description = "A digital twin of an engine";
+    DT.warranty = false;
+    DT.state = DT_State.NotCreated;
+    DT.timestamp = block.timestamp;
+    agreementFormIPFS = 'jhfghffs';
+}
+
+modifier OnlyOwner(){
+    require(msg.sender == DT.CurrentOwner);
+    _;
+} 
+
+modifier OnlyProcessManager(){
+    require(msg.sender == ProcessManager);
+    _;
+} 
+
+modifier OnlyDesignManager(){
+    require(msg.sender == DesignManager);
+    _;
+} 
+
+
+modifier OnlyQualityManager(){
+    require(msg.sender == QualityManager);
+    _;
+} 
+
+modifier OnlyTestingManager(){
+    require(msg.sender == TestingManager);
+    _;
+} 
+
+modifier OnlyDeliveryManager(){
+    require(msg.sender == DeliveryManager);
+    _;
+} 
+
+modifier OnlyDeliveryManagerOrCurrentOwner(){
+    require(msg.sender == DeliveryManager || msg.sender == DT.CurrentOwner);
+    _;
+} 
+
+//events
+event ProcessManagerOrderedCreationOfDT();
+event DT_DesignStarted();
+event DT_DesignEndedSuccessfully();
+event CannotProceedYetResultsOfDesignNotApproved();
+event DT_BuildingJustStarted();
+event DT_BuildingEndedSuccessfully();
+event CannotProceedYetResultsOfBuildingNotApproved();
+event DT_UndergoingTesting();
+event DT_TestingEndedSuccessfully();
+event CannotProceedYetResultsOfTestingNotApproved();
+event DT_AvailableForRelease(address);//address of the caller who made it available for release
+event DT_NewOwnerRegistered(address);//address of the new Owner
+event DT_IsNowReleasedtoTheNewOwner(address);//add address later check
+
+
+//Functions
+
+   //this function initiates the digital twin creation process
+    function CreateDT() OnlyProcessManager public{
+        require(DT.state == DT_State.NotCreated);
+        DT.state = DT_State.OrderedToBeCreated;
+        emit ProcessManagerOrderedCreationOfDT();
+    }
+    
+    //this function starts the design phase
+    function InitiateDesignPhase() OnlyDesignManager public{
+        require(DT.state == DT_State.OrderedToBeCreated);
+        DT.state = DT_State.InDesignPhase;
+        emit DT_DesignStarted();
+    }
+    
+    //this function is to check the results of the design phase
+    function ApproveResultsofDesignPhase(bool result) OnlyDesignManager public{
+        require(DT.state == DT_State.InDesignPhase);
+        if(result == true){
+          DT.state = DT_State.DoneWithDesignPhase;
+          emit DT_DesignEndedSuccessfully();
+        }
+        else{
+            //do not change the state
+            emit CannotProceedYetResultsOfDesignNotApproved();//therefore cannot proceed to next phase
+        }
+    }
+    
+    //this function is to start building phase
+    function CommenceBuildingPhase() OnlyQualityManager public{
+        require(DT.state == DT_State.DoneWithDesignPhase);
+        DT.state = DT_State.InBuildingPhase;
+        emit DT_BuildingJustStarted();
+    }
+    
+    //this function is to check the results of the building phase
+    function ApproveResultsofBuildingPhase(bool result) OnlyQualityManager public{
+        require(DT.state == DT_State.InBuildingPhase);
+        if(result == true){
+          DT.state = DT_State.DoneWithBuildingPhase;
+          emit DT_BuildingEndedSuccessfully();
+        }
+        else{
+            //do not change the state
+            emit CannotProceedYetResultsOfBuildingNotApproved();//therefore cannot proceed to next phase
+        }
+    }  
+    
+     //this function is to start testing phase
+    function StartTestingPhase() OnlyTestingManager public{
+        require(DT.state == DT_State.DoneWithBuildingPhase);
+        DT.state = DT_State.InTestingPhase;
+        emit DT_UndergoingTesting();
+    }
+    
+    //this function is to check the results of the testing phase
+    function ApproveResultsofTestingPhase(bool result) OnlyTestingManager public{
+        require(DT.state == DT_State.InTestingPhase);
+        if(result == true){
+          DT.state = DT_State.DoneWithTestingPhase;
+          emit DT_TestingEndedSuccessfully();
+        }
+        else{
+            //do not change the state
+            emit CannotProceedYetResultsOfTestingNotApproved();//therefore cannot proceed to next phase
+        }
+    }  
+    
+    //this function is to release the asset
+    function ReleaseAssetForDeployment() OnlyDeliveryManagerOrCurrentOwner public{
+        require((DT.state == DT_State.DoneWithTestingPhase && msg.sender == DeliveryManager) || 
+                (DT.state == DT_State.ReleasedToNewOwner && msg.sender == DT.CurrentOwner));
+        DT.state = DT_State.AvailableForRelease;
+        emit DT_AvailableForRelease(msg.sender);
+        
+    }
+    //this function is used to register the new Owner
+    function RegisterDTOwner(address newOwner) OnlyDeliveryManager public{
+        require(DT.state == DT_State.AvailableForRelease && newOwner != DT.CurrentOwner);
+        DT.state = DT_State.ReservedForNewOwner;
+        emit DT_NewOwnerRegistered(newOwner);
+        
+    }
+    
+    //this function relesases owner rights
+    function ReleaseOwnershipRights(address newOwner) OnlyOwner() public{
+        require(DT.state == DT_State.ReservedForNewOwner);
+        DT.CurrentOwner = newOwner;
+        DT.state = DT_State.ReleasedToNewOwner;
+        emit DT_IsNowReleasedtoTheNewOwner(newOwner);
+    }
+    
+   
+}
